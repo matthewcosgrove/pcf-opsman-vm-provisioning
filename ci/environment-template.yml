@@ -1,0 +1,131 @@
+environment:
+  name: (( param "Please provide environment name" ))
+  bucc_bosh_env_alias: (( param "Please provide environment bucc_bosh_env_alias" ))
+  config_root_dir: (( param "Please provide environment config_root_dir" ))
+meta:
+  ci_docker_image: (( param "Please provide ci_docker_image" ))
+  ci_docker_image_tag: (( param "Please provide ci_docker_tag" ))
+  task_image:
+    type: docker-image
+    source:
+      repository: (( grab meta.ci_docker_image ))
+      tag: (( grab meta.ci_docker_image_tag ))  
+
+groups:
+- (( defer append )) 
+- name: opsman-vm-installs
+  jobs:
+  - (( concat environment.name "-opsman-install" ))
+
+jobs:
+- name: (( concat environment.name "-opsman-install" ))
+  serial: true
+  plan:
+  - aggregate:
+    - get: platform-automation-image
+      params:
+        unpack: true
+    - get: platform-automation-tasks
+      params:
+        unpack: true
+    - get: config
+    - get: environment-state-repo
+    - get: ci-tasks
+  - task: check-opsman-via-pivotal-platform-automation-prerequisites------vcenter connectivity
+    config:
+      platform: linux
+      image_resource: (( grab meta.task_image ))
+      params:
+        GOVC_URL: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_ip))" ))
+        GOVC_DATACENTER: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_datacenter))" ))
+        GOVC_USERNAME: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_user))" ))
+        GOVC_PASSWORD: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_password))" ))
+      inputs:
+      - name: ci-tasks
+      run:
+        path: ci-tasks/ci/tasks/check-vcenter-connectivity.sh
+  - task: interpolate-creds
+    <<: *interpolate-creds
+  - task: check-interpolated-creds
+    <<: *check-interpolated-creds
+  - task: (( concat "remove-" environment.name "-opsman-if-exists" ))
+    config:
+      platform: linux
+      image_resource: (( grab meta.task_image ))
+      params:
+        GOVC_URL: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_ip))" ))
+        GOVC_DATACENTER: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_datacenter))" ))
+        GOVC_USERNAME: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_user))" ))
+        GOVC_PASSWORD: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_password))" ))
+        OM_IP: (( concat "((" environment.bucc_bosh_env_alias "_opsman_ip_" environment.name "))" ))
+      inputs:
+      - name: ci-tasks
+      - name: config
+      - name: interpolated-creds
+      run:
+        path: ci-tasks/ci/tasks/remove-opsman-if-exists.sh
+  - task: download-product
+    image: platform-automation-image
+    file: platform-automation-tasks/tasks/download-product-s3.yml
+    params:
+      CONFIG_FILE: config/download-ops-manager.yml
+    input_mapping:
+      config: interpolated-creds
+  - task: create-vm
+    image: platform-automation-image
+    file: platform-automation-tasks/tasks/create-vm.yml
+    params:
+      VARS_FILES: (( concat "vars/" environment.config_root_dir "/" environment.name "/infra-settings.yml" ))
+      OPSMAN_CONFIG_FILE: (( concat "config/opsman_2_7_" environment.name ".yml" ))
+    input_mapping:
+      vars: environment-state-repo
+      config: interpolated-creds
+      state: config
+      image: downloaded-product
+    ensure:
+      do:
+        - task: make-commit
+          image: platform-automation-image
+          file: platform-automation-tasks/tasks/make-git-commit.yml
+          input_mapping:
+            repository: environment-state-repo
+            file-source: generated-state
+          output_mapping:
+            repository-commit: config-commit
+          params:
+            FILE_SOURCE_PATH: state.yml
+            FILE_DESTINATION_PATH: state.yml
+            GIT_AUTHOR_NAME: "Platform Automation Bot"
+            COMMIT_MESSAGE: 'Update state file'
+        - put: environment-state-repo
+          params:
+            repository: config-commit
+            merge: true
+ 
+interpolate-creds: &interpolate-creds
+  image: platform-automation-image
+  file: platform-automation-tasks/tasks/credhub-interpolate.yml
+  params:
+    CREDHUB_CLIENT: ((credhub_username))
+    CREDHUB_SECRET: ((credhub_password))
+    CREDHUB_SERVER: ((credhub_url))
+    CREDHUB_CA_CERT: ((credhub_ca_cert))
+    PREFIX: '/concourse/main'
+    INTERPOLATION_PATHS: config
+    SKIP_MISSING: true
+  input_mapping:
+    files: config
+  output_mapping:
+    interpolated-files: interpolated-creds
+check-interpolated-creds: &check-interpolated-creds
+  config:
+    platform: linux
+    image_resource: (( grab meta.task_image ))
+    inputs:
+    - name: interpolated-creds
+    run:
+      path: sh
+      args:
+      - -ec
+      - |
+        cat interpolated-creds/config/*

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -eu
+
+echo "Using infra-settings found in $LAB_CONFIG_ROOT_DIR i.e."
+ls -la $LAB_CONFIG_ROOT_DIR
+relative_config_root_dir=${LAB_CONFIG_ROOT_DIR##*/}
+echo "Relative config root dir: $relative_config_root_dir"
+bucc_bosh_env_alias=${1:-bucc}
+fly_target=$bucc_bosh_env_alias
+echo "Checking fly target: $fly_target"
+#fly -t $fly_target ps
+echo "TODO: Uncomment line above"
+
+REPO_ROOT_DIR="$(dirname $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd ))"
+
+TMPDIR=""
+TMPDIR=$(mktemp -d -t repipe.XXXXXX)
+trap "rm -rf ${TMPDIR}" INT TERM QUIT EXIT
+
+for environment in $(ls ${LAB_CONFIG_ROOT_DIR}); do
+  cat <<EOF >${TMPDIR}/env.yml
+environment:
+  name: ${environment}
+  config_root_dir: ${relative_config_root_dir}
+  bucc_bosh_env_alias: ${bucc_bosh_env_alias}
+EOF
+
+  spruce merge --prune meta \
+    ${REPO_ROOT_DIR}/ci/environment-template.yml \
+    ${TMPDIR}/env.yml \
+    ${REPO_ROOT_DIR}/ci/settings.yml \
+    >${TMPDIR}/${environment}.yml
+
+  rm ${TMPDIR}/env.yml
+done
+
+spruce merge --prune meta \
+  ${REPO_ROOT_DIR}/ci/base.yml \
+  ${REPO_ROOT_DIR}/ci/settings.yml \
+  ${TMPDIR}/*.yml \
+  > ${TMPDIR}/pipeline.yml
+
+cat ${TMPDIR}/pipeline.yml > $REPO_ROOT_DIR/current-pipeline.yml
+ls -la $TMPDIR
+echo "File is ready in $REPO_ROOT_DIR"
+fly -t $fly_target set-pipeline -n -p pcf-opsman-vm-installs -c ${TMPDIR}/pipeline.yml
+fly -t $fly_target unpause-pipeline -p pcf-opsman-vm-installs
+
