@@ -40,9 +40,6 @@ spruce merge --prune meta \
   ${TMPDIR}/*.yml \
   > ${TMPDIR}/pipeline.yml
 
-cat ${TMPDIR}/pipeline.yml > $REPO_ROOT_DIR/current-pipeline.yml
-ls -la $TMPDIR
-echo "File is ready in $REPO_ROOT_DIR"
 fly -t $fly_target set-pipeline -n -p pcf-opsman-vm-installs -c ${TMPDIR}/pipeline.yml
 fly -t $fly_target unpause-pipeline -p pcf-opsman-vm-installs
 
