@@ -9,8 +9,7 @@ echo "Relative config root dir: $relative_config_root_dir"
 bucc_bosh_env_alias=${1:-bucc}
 fly_target=$bucc_bosh_env_alias
 echo "Checking fly target: $fly_target"
-#fly -t $fly_target ps
-echo "TODO: Uncomment line above"
+fly -t $fly_target ps
 
 REPO_ROOT_DIR="$(dirname $( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd ))"
 
