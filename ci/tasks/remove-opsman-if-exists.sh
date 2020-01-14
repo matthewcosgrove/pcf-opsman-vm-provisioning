@@ -1,13 +1,14 @@
 #!/bin/bash
 
 set -eu
+: "${ENVIRONMENT_NAME:? ENVIRONMENT_NAME must be set }"
 : "${GOVC_URL:? GOVC_URL must be set }"
 : "${GOVC_DATACENTER:? GOVC_DATACENTER must be set }"
 : "${GOVC_USERNAME:? GOVC_USERNAME must be set }"
 : "${GOVC_PASSWORD:? GOVC_PASSWORD must be set }"
 : "${OM_IP:? OM_IP must be set }"
 
-state_yaml_location=config
+state_yaml_location=config/resource-pool-config/$ENVIRONMENT_NAME
 state_yaml=$state_yaml_location/state.yml
 if [ -f "$state_yaml" ]; then
     pushd $state_yaml_location > /dev/null
