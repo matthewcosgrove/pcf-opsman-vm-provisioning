@@ -159,7 +159,7 @@ resources:
 - name: config
   type: git
   source:
-    uri: (( grab meta.repo_uri ))
+    uri: (( grab meta.opsman_vm_state_repo_uri ))
     private_key: (( grab meta.git_private_key ))
     branch: master
 - name: ci-tasks
