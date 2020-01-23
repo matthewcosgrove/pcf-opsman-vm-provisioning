@@ -13,7 +13,7 @@ meta:
 
 groups:
 - (( defer append )) 
-- name: opsman-vm-installs
+- name: (( concat "opsman-vm-installs-" environment.name ))
   jobs:
   - (( concat environment.name "-opsman-install" ))
 
@@ -53,6 +53,7 @@ jobs:
       platform: linux
       image_resource: (( grab meta.task_image ))
       params:
+        ENVIRONMENT_NAME: (( grab environment.name ))
         GOVC_URL: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_ip))" ))
         GOVC_DATACENTER: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_datacenter))" ))
         GOVC_USERNAME: (( concat "((" environment.bucc_bosh_env_alias "_vcenter_user))" ))
@@ -68,7 +69,7 @@ jobs:
     image: platform-automation-image
     file: platform-automation-tasks/tasks/download-product-s3.yml
     params:
-      CONFIG_FILE: config/download-ops-manager.yml
+      CONFIG_FILE: (( concat environment.config_root_dir "/" environment.name "/download-ops-manager.yml" ))
     input_mapping:
       config: interpolated-creds
   - task: create-vm
@@ -76,7 +77,7 @@ jobs:
     file: platform-automation-tasks/tasks/create-vm.yml
     params:
       VARS_FILES: (( concat "vars/" environment.config_root_dir "/" environment.name "/infra-settings.yml" ))
-      OPSMAN_CONFIG_FILE: (( concat "config/opsman_2_7_" environment.name ".yml" ))
+      OPSMAN_CONFIG_FILE: (( concat environment.config_root_dir "/" environment.name "/opsman_2_7_" environment.name ".yml" ))
     input_mapping:
       vars: environment-state-repo
       config: interpolated-creds
@@ -94,7 +95,7 @@ jobs:
             repository-commit: config-commit
           params:
             FILE_SOURCE_PATH: state.yml
-            FILE_DESTINATION_PATH: state.yml
+            FILE_DESTINATION_PATH: (( concat environment.config_root_dir "/" environment.name "/state.yml" ))
             GIT_AUTHOR_NAME: "Platform Automation Bot"
             COMMIT_MESSAGE: 'Update state file'
         - put: environment-state-repo
@@ -111,7 +112,7 @@ interpolate-creds: &interpolate-creds
     CREDHUB_SERVER: ((credhub_url))
     CREDHUB_CA_CERT: ((credhub_ca_cert))
     PREFIX: '/concourse/main'
-    INTERPOLATION_PATHS: config
+    INTERPOLATION_PATHS: (( concat "resource-pool-config/" environment.name ))
     SKIP_MISSING: true
   input_mapping:
     files: config
@@ -119,6 +120,8 @@ interpolate-creds: &interpolate-creds
     interpolated-files: interpolated-creds
 check-interpolated-creds: &check-interpolated-creds
   config:
+    params:
+      INTERPOLATION_PATHS: (( concat "resource-pool-config/" environment.name ))
     platform: linux
     image_resource: (( grab meta.task_image ))
     inputs:
@@ -128,4 +131,4 @@ check-interpolated-creds: &check-interpolated-creds
       args:
       - -ec
       - |
-        cat interpolated-creds/config/*
+        cat interpolated-creds/$INTERPOLATION_PATHS/*

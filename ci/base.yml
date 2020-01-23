@@ -128,7 +128,7 @@ jobs:
     image: platform-automation-image
     file: platform-automation-tasks/tasks/download-product.yml
     params:
-      CONFIG_FILE: config/download-ops-manager.yml
+      CONFIG_FILE: opsman-download-config/download-ops-manager.yml
     input_mapping:
       config: interpolated-creds
   - aggregate:
@@ -204,7 +204,6 @@ resources:
   source:
     interval: 24h
 
-# Duplicated in environment-template.yml
 interpolate-creds: &interpolate-creds
   image: platform-automation-image
   file: platform-automation-tasks/tasks/credhub-interpolate.yml
@@ -214,7 +213,7 @@ interpolate-creds: &interpolate-creds
     CREDHUB_SERVER: ((credhub_url))
     CREDHUB_CA_CERT: ((credhub_ca_cert))
     PREFIX: '/concourse/main'
-    INTERPOLATION_PATHS: config
+    INTERPOLATION_PATHS: opsman-download-config
     SKIP_MISSING: true
   input_mapping:
     files: config
@@ -222,6 +221,8 @@ interpolate-creds: &interpolate-creds
     interpolated-files: interpolated-creds
 check-interpolated-creds: &check-interpolated-creds
   config:
+    params:
+      INTERPOLATION_PATHS: opsman-download-config
     platform: linux
     image_resource: (( grab meta.task_image ))
     inputs:
@@ -231,4 +232,4 @@ check-interpolated-creds: &check-interpolated-creds
       args:
       - -ec
       - |
-        cat interpolated-creds/config/*
+        cat interpolated-creds/$INTERPOLATION_PATHS/*
